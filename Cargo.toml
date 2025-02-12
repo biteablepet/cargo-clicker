@@ -3,7 +3,7 @@ description = "who's a good programmer? you are!"
 repository = "https://github.com/biteablepet/cargo-clicker"
 license = "MIT OR Apache-2.0"
 name = "cargo-clicker"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]

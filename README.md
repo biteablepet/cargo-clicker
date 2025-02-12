@@ -1,7 +1,7 @@
 # `cargo-clicker`
 
 [![crates.io](https://img.shields.io/crates/v/cargo-clicker.svg)](https://crates.io/crates/cargo-clicker)
-[![Rust CI](https://github.com/biteablepet/cargo-clicker/workflows/Rust/badge.svg?branch=main)](https://github.com/biteablepet/cargo-clicker/actions/workflows/ci.yml)
+[![Rust CI](https://github.com/biteablepet/cargo-clicker/workflows/Release/badge.svg?branch=main)](https://github.com/biteablepet/cargo-clicker/actions/workflows/release.yml)
 
 haven't you ever wanted some positive reinforcement when you finally get those tests to pass?
 

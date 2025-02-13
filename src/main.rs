@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     env,
     error::Error,
+    ffi::OsStr,
     fs::{self, File},
     io::{BufReader, Cursor, Read, Seek},
     path::Path,
@@ -16,12 +17,14 @@ use rodio::{Decoder, OutputStream, Sink, Source};
 // the execution of the build from the need to wait for sounds to finish
 const JUST_CLICK_VAR: &str = "__CARGO_CLICKER_PLAYING_SOUND";
 
-// if SILENCE_VAR is set, no sound will ever be played
+// if CARGO_REPLACEMENT_VAR is set, its value is the next binary invoked
+// instead of cargo
+// if SILENCE_VAR is set, no sound will ever be played and the result of
+// the invocation will always be directly emitted
 // if RECURSION_PREVENTION_VAR is set, no sound will be played under the
 // assumption that we're being invoked recursively and this could sound,
 // well, really really bad
-// if RECURSION_PREVENTION_PREVENTION_VAR is set go wild i guess i'm not
-// your owner
+const CARGO_REPLACEMENT_VAR: &str = "CARGO_CLICKER_ACTUAL";
 const SILENCE_VAR: &str = "CARGO_CLICKER_SILENCE";
 const RECURSION_PREVENTION_VAR: &str = "__CARGO_CLICKER_INSIDE_CARGO_CLICKER";
 
@@ -83,7 +86,7 @@ fn real_main() -> Result<i32, Box<dyn Error>> {
 
     // we can execute anything rather than cargo itself, like if we want
     // to run `cargo-mommy` next for an especially good puppy
-    let cargo = env::var("CARGO_CLICKER_ACTUAL")
+    let cargo = env::var(CARGO_REPLACEMENT_VAR)
         .or_else(|_| env::var("CARGO"))
         .map(Cow::from)
         .unwrap_or_else(|_| "cargo".into());
@@ -92,8 +95,7 @@ fn real_main() -> Result<i32, Box<dyn Error>> {
     // because while playing fifty overlapping sounds could be silly, we
     // think that sounds exhausting for a puppy
 
-    let silenced = env::var(SILENCE_VAR).is_ok()
-        || env::var(RECURSION_PREVENTION_VAR).is_ok();
+    let silenced = env::var(SILENCE_VAR).is_ok() || env::var(RECURSION_PREVENTION_VAR).is_ok();
 
     // we run as `cargo-clicker [args...]` or `cargo clicker [args...]`.
     // we need to strip off any prefixed repetitions of clicker (to skip
@@ -117,7 +119,7 @@ fn real_main() -> Result<i32, Box<dyn Error>> {
     if !silenced
         && !matches!(
             cmd.get_args()
-                .filter_map(std::ffi::OsStr::to_str)
+                .filter_map(OsStr::to_str)
                 .try_for_each(|arg| match arg.as_bytes() {
                     b"--" => Err(false),
                     b"--quiet" => Err(true),
@@ -149,21 +151,34 @@ fn respond(kind: Response) -> Result<(), Box<dyn Error>> {
 trait DynamicSource: Seek + Read + Send + Sync {}
 impl<T: Seek + Read + Send + Sync> DynamicSource for T {}
 
-fn get_sound(mut rng: &mut ThreadRng, kind: Response) -> Result<Option<Box<dyn DynamicSource>>, Box<dyn Error>> {
+fn get_sound(
+    mut rng: &mut ThreadRng,
+    kind: Response,
+) -> Result<Option<Box<dyn DynamicSource>>, Box<dyn Error>> {
     let sound = match env::var(RESPONSE_DIR_VAR) {
         Ok(response_dir) => {
             let dir = fs::read_dir(Path::new(&response_dir).join(kind.to_string()))?;
-            dir.choose(&mut rng)
-                .transpose()?
-                .map(|entry| File::open(entry.path()))
-                .transpose()?
-                .map(|file| Box::new(BufReader::new(file)) as Box<dyn DynamicSource>)
+            let Some(entry) = dir
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .choose(&mut rng)
+            else {
+                return Ok(None);
+            };
+
+            Some(Box::new(BufReader::new(File::open(entry.path())?)) as Box<dyn DynamicSource>)
         }
-        Err(_) => match kind {
-            Response::Positive => BAKED_POSITIVE_RESPONSES.choose(&mut rng),
-            Response::Negative => BAKED_NEGATIVE_RESPONSES.choose(&mut rng),
+        Err(_) => {
+            let responses = match kind {
+                Response::Positive => BAKED_POSITIVE_RESPONSES.choose(&mut rng),
+                Response::Negative => BAKED_NEGATIVE_RESPONSES.choose(&mut rng),
+            };
+            let Some(bytes) = responses.into_iter().choose(rng) else {
+                return Ok(None);
+            };
+
+            Some(Box::new(Cursor::new(bytes)) as Box<dyn DynamicSource>)
         }
-        .map(|response| Box::new(Cursor::new(response)) as Box<dyn DynamicSource>),
     };
 
     Ok(sound)

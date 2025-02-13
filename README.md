@@ -19,6 +19,7 @@ $ cargo clicker test
 
 # configuration
 
+* `CARGO_CLICKER_ACTUAL` - binary to run next instead of cargo
 * `CARGO_CLICKER_SILENCE` - never play sound when this variable is set
 * `CARGO_CLICKER_RESPONSES` - directory containing "Positive" and "Negative" subdirectories with custom reinforcement~
 
